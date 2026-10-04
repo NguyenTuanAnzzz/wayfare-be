@@ -1,5 +1,6 @@
 package an.example.wayfare.models;
 
+import an.example.wayfare.enums.OtpType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -23,6 +24,10 @@ public class Otp {
 
     @Column(nullable = false)
     private String code;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OtpType type;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

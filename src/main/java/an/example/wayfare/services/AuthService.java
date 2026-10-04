@@ -2,7 +2,11 @@ package an.example.wayfare.services;
 
 
 import an.example.wayfare.dtos.request.RegisterRequest;
+import an.example.wayfare.dtos.request.VerifyEmailRequest;
 import an.example.wayfare.dtos.response.RegisterResponse;
+import an.example.wayfare.dtos.response.VerifyEmailResponse;
+import an.example.wayfare.enums.OtpType;
+import an.example.wayfare.enums.UserStatus;
 import an.example.wayfare.exceptions.AppException;
 import an.example.wayfare.models.Otp;
 import an.example.wayfare.models.User;
@@ -16,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 
 @Service
@@ -69,7 +74,11 @@ public class AuthService {
 
         String randomOtp = generateOtp();
 
-        Otp otp = Otp.builder().email(request.getEmail()).code(randomOtp).build();
+        Otp otp = Otp.builder()
+                .email(request.getEmail())
+                .code(passwordEncoder.encode(randomOtp))
+                .type(OtpType.REGISTER)
+                .build();
 
         otpRepo.save(otp);
 
@@ -103,5 +112,46 @@ public class AuthService {
         }
 
         return otp.toString();
+    }
+
+
+    public VerifyEmailResponse verifyEmail(@Valid VerifyEmailRequest request) {
+
+        Otp otp = otpRepo
+                .findTopByEmailAndTypeOrderByCreatedAtDesc(
+                        request.getEmail(),
+                        OtpType.REGISTER
+                )
+                .orElseThrow(() ->
+                        new AppException("OTP không tồn tại", 400)
+                );
+
+        if (LocalDateTime.now().isAfter(otp.getExpiresAt())) {
+            throw new AppException("OTP đã hết hạn", 400);
+        }
+
+        if (!passwordEncoder.matches(
+                request.getOtp(),
+                otp.getCode()
+        )) {
+            throw new AppException("OTP không chính xác", 400);
+        }
+
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException("Không tìm thấy người dùng", 404)
+                );
+
+        if (user.getStatus() == UserStatus.ACTIVE) {
+            throw new AppException("Email đã được xác thực", 400);
+        }
+
+        user.setStatus(UserStatus.ACTIVE);
+        userRepo.save(user);
+
+        return VerifyEmailResponse.builder()
+                .message("Xác thực email thành công")
+                .build();
     }
 }
