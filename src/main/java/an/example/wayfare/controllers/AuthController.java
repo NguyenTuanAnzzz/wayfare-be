@@ -1,10 +1,13 @@
 package an.example.wayfare.controllers;
 
+import an.example.wayfare.dtos.request.LoginRequest;
 import an.example.wayfare.dtos.request.RegisterRequest;
 import an.example.wayfare.dtos.request.VerifyEmailRequest;
+import an.example.wayfare.dtos.response.LoginResponse;
 import an.example.wayfare.dtos.response.RegisterResponse;
 import an.example.wayfare.dtos.response.VerifyEmailResponse;
 import an.example.wayfare.services.AuthService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,4 +33,12 @@ public class AuthController {
     ) {
         return authService.verifyEmail(request);
     }
+
+    @PostMapping("/login")
+    public LoginResponse login(
+            @Valid @RequestBody LoginRequest request, HttpServletResponse response
+    ) {
+        return authService.login(request, response);
+    }
+
 }

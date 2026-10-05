@@ -1,8 +1,10 @@
 package an.example.wayfare.services;
 
 
+import an.example.wayfare.dtos.request.LoginRequest;
 import an.example.wayfare.dtos.request.RegisterRequest;
 import an.example.wayfare.dtos.request.VerifyEmailRequest;
+import an.example.wayfare.dtos.response.LoginResponse;
 import an.example.wayfare.dtos.response.RegisterResponse;
 import an.example.wayfare.dtos.response.VerifyEmailResponse;
 import an.example.wayfare.enums.OtpType;
@@ -12,13 +14,19 @@ import an.example.wayfare.models.Otp;
 import an.example.wayfare.models.User;
 import an.example.wayfare.repositories.OtpRepo;
 import an.example.wayfare.repositories.UserRepo;
+import an.example.wayfare.securites.UserPrincipal;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -39,6 +47,12 @@ public class AuthService {
     private EmailService emailService;
 
     private final SecureRandom random = new SecureRandom();
+
+    @Autowired
+    private CustomUserDetailsService customUserDetailsService;
+
+    @Autowired
+    private JwtService jwtService;
 
     @Transactional
     public RegisterResponse register(@Valid RegisterRequest request) {
@@ -152,6 +166,46 @@ public class AuthService {
 
         return VerifyEmailResponse.builder()
                 .message("Xác thực email thành công")
+                .build();
+    }
+
+    public LoginResponse login(@Valid LoginRequest request, HttpServletResponse response) {
+        UserPrincipal userPrincipal = (UserPrincipal) customUserDetailsService.loadUserByUsername(request.getEmail());
+
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                userPrincipal.getPassword()
+        )) {
+            throw new AppException(
+                    "Email hoặc mật khẩu không chính xác",
+                    401
+            );
+        }
+
+        String accessToken =
+                jwtService.generateAccessToken(userPrincipal);
+
+        String refreshToken =
+                jwtService.generateRefreshToken(userPrincipal);
+
+
+        // lưu refreshToken vào Cookie
+        ResponseCookie cookie = ResponseCookie
+                .from("refreshToken", refreshToken)
+                .httpOnly(true)
+                .secure(false) // localhost
+                .path("/api/auth")
+                .maxAge(Duration.ofDays(7))
+                .sameSite("Lax")
+                .build();
+
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                cookie.toString()
+        );
+
+        return LoginResponse.builder()
+                .accessToken(accessToken)
                 .build();
     }
 }
