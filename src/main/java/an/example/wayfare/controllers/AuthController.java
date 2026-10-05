@@ -10,10 +10,7 @@ import an.example.wayfare.services.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -39,6 +36,14 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request, HttpServletResponse response
     ) {
         return authService.login(request, response);
+    }
+
+    @PostMapping("/refresh")
+    public LoginResponse refresh(
+            @CookieValue(value="refreshToken", required = false)
+            String refreshToken
+    ) {
+        return authService.refresh(refreshToken);
     }
 
 }

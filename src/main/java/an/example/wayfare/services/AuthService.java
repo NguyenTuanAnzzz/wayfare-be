@@ -208,4 +208,60 @@ public class AuthService {
                 .accessToken(accessToken)
                 .build();
     }
+
+    public LoginResponse refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new AppException(
+                    "Không tìm thấy refresh token",
+                    401
+            );
+        }
+
+        try {
+
+            String email =
+                    jwtService.extractUsername(refreshToken);
+
+            String tokenType =
+                    jwtService.extractTokenType(refreshToken);
+
+            if (!"REFRESH".equals(tokenType)) {
+                throw new AppException(
+                        "Refresh token không hợp lệ",
+                        401
+                );
+            }
+
+            UserPrincipal userPrincipal =
+                    (UserPrincipal)
+                            customUserDetailsService
+                                    .loadUserByUsername(email);
+
+            if (!jwtService.isTokenValid(
+                    refreshToken,
+                    userPrincipal
+            )) {
+                throw new AppException(
+                        "Refresh token đã hết hạn hoặc không hợp lệ",
+                        401
+                );
+            }
+
+            String accessToken =
+                    jwtService.generateAccessToken(userPrincipal);
+
+            return LoginResponse.builder()
+                    .accessToken(accessToken)
+                    .build();
+
+        } catch (AppException e) {
+            throw e;
+
+        } catch (Exception e) {
+            throw new AppException(
+                    "Refresh token không hợp lệ",
+                    401
+            );
+        }
+    }
 }
