@@ -3,9 +3,11 @@ package an.example.wayfare.services;
 
 import an.example.wayfare.dtos.request.LoginRequest;
 import an.example.wayfare.dtos.request.RegisterRequest;
+import an.example.wayfare.dtos.request.ResendOtpRequest;
 import an.example.wayfare.dtos.request.VerifyEmailRequest;
 import an.example.wayfare.dtos.response.LoginResponse;
 import an.example.wayfare.dtos.response.RegisterResponse;
+import an.example.wayfare.dtos.response.ResendOtpResponse;
 import an.example.wayfare.dtos.response.VerifyEmailResponse;
 import an.example.wayfare.enums.OtpType;
 import an.example.wayfare.enums.UserStatus;
@@ -111,6 +113,7 @@ public class AuthService {
                 .role(user.getRole().name())
                 .status(user.getStatus().name())
                 .message("Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.")
+                .expiresAt(otp.getExpiresAt())
                 .build();
     }
 
@@ -169,12 +172,36 @@ public class AuthService {
                 .build();
     }
 
-    public LoginResponse login(@Valid LoginRequest request, HttpServletResponse response) {
-        UserPrincipal userPrincipal = (UserPrincipal) customUserDetailsService.loadUserByUsername(request.getEmail());
+    public LoginResponse login(
+            @Valid LoginRequest request,
+            HttpServletResponse response
+    ) {
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException(
+                                "Email hoặc mật khẩu không chính xác",
+                                401
+                        )
+                );
+
+        if (user.getStatus() == UserStatus.PENDING) {
+            throw new AppException(
+                    "Tài khoản chưa xác thực email",
+                    403
+            );
+        }
+
+        if (user.getStatus() == UserStatus.BLOCKED) {
+            throw new AppException(
+                    "Tài khoản đã bị khóa",
+                    403
+            );
+        }
 
         if (!passwordEncoder.matches(
                 request.getPassword(),
-                userPrincipal.getPassword()
+                user.getPassword()
         )) {
             throw new AppException(
                     "Email hoặc mật khẩu không chính xác",
@@ -182,22 +209,29 @@ public class AuthService {
             );
         }
 
+        UserPrincipal userPrincipal =
+                (UserPrincipal) customUserDetailsService
+                        .loadUserByUsername(request.getEmail());
+
         String accessToken =
                 jwtService.generateAccessToken(userPrincipal);
 
         String refreshToken =
                 jwtService.generateRefreshToken(userPrincipal);
 
+        ResponseCookie.ResponseCookieBuilder cookieBuilder =
+                ResponseCookie
+                        .from("refreshToken", refreshToken)
+                        .httpOnly(true)
+                        .secure(false)
+                        .path("/api/auth")
+                        .sameSite("Lax");
 
-        // lưu refreshToken vào Cookie
-        ResponseCookie cookie = ResponseCookie
-                .from("refreshToken", refreshToken)
-                .httpOnly(true)
-                .secure(false) // localhost
-                .path("/api/auth")
-                .maxAge(Duration.ofDays(7))
-                .sameSite("Lax")
-                .build();
+        if (request.isRememberMe()) {
+            cookieBuilder.maxAge(Duration.ofDays(7));
+        }
+
+        ResponseCookie cookie = cookieBuilder.build();
 
         response.addHeader(
                 HttpHeaders.SET_COOKIE,
@@ -210,37 +244,34 @@ public class AuthService {
     }
 
     public LoginResponse refresh(String refreshToken) {
+
+        System.out.println("refreshToken = " + refreshToken);
+
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new AppException(
-                    "Không tìm thấy refresh token",
-                    401
-            );
+            throw new AppException("Không tìm thấy refresh token", 401);
         }
 
         try {
+            String email = jwtService.extractUsername(refreshToken);
+            System.out.println("email = " + email);
 
-            String email =
-                    jwtService.extractUsername(refreshToken);
-
-            String tokenType =
-                    jwtService.extractTokenType(refreshToken);
+            String tokenType = jwtService.extractTokenType(refreshToken);
+            System.out.println("tokenType = " + tokenType);
 
             if (!"REFRESH".equals(tokenType)) {
-                throw new AppException(
-                        "Refresh token không hợp lệ",
-                        401
-                );
+                throw new AppException("Refresh token không hợp lệ", 401);
             }
 
             UserPrincipal userPrincipal =
-                    (UserPrincipal)
-                            customUserDetailsService
-                                    .loadUserByUsername(email);
+                    (UserPrincipal) customUserDetailsService
+                            .loadUserByUsername(email);
 
-            if (!jwtService.isTokenValid(
-                    refreshToken,
-                    userPrincipal
-            )) {
+            boolean valid =
+                    jwtService.isTokenValid(refreshToken, userPrincipal);
+
+            System.out.println("token valid = " + valid);
+
+            if (!valid) {
                 throw new AppException(
                         "Refresh token đã hết hạn hoặc không hợp lệ",
                         401
@@ -256,12 +287,60 @@ public class AuthService {
 
         } catch (AppException e) {
             throw e;
-
         } catch (Exception e) {
+            e.printStackTrace(); // QUAN TRỌNG
             throw new AppException(
                     "Refresh token không hợp lệ",
                     401
             );
         }
+    }
+
+
+    @Transactional
+    public ResendOtpResponse resendOtp(@Valid ResendOtpRequest request) {
+
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException(
+                                "Không tìm thấy người dùng",
+                                404
+                        )
+                );
+
+        // Nếu email đã xác thực thì không cần gửi OTP nữa
+        if (user.getStatus() == UserStatus.ACTIVE) {
+            throw new AppException(
+                    "Email đã được xác thực",
+                    400
+            );
+        }
+
+        // Tạo OTP mới
+        String randomOtp = generateOtp();
+
+        // Lưu OTP mới
+        Otp otp = Otp.builder()
+                .email(user.getEmail())
+                .code(passwordEncoder.encode(randomOtp))
+                .type(OtpType.REGISTER)
+                .build();
+
+        otpRepo.save(otp);
+
+        // Gửi OTP qua email
+        emailService.sendEmail(
+                user.getEmail(),
+                "Mã xác thực Wayfare",
+                "Mã OTP của bạn là: " + randomOtp
+                        + "\n\nMã OTP có hiệu lực trong 1 phút."
+        );
+
+        return ResendOtpResponse.builder()
+                .email(user.getEmail())
+                .message("Đã gửi lại mã OTP. Vui lòng kiểm tra email.")
+                .expiresAt(otp.getExpiresAt())
+                .build();
     }
 }

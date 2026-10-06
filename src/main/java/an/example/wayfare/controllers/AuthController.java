@@ -2,9 +2,11 @@ package an.example.wayfare.controllers;
 
 import an.example.wayfare.dtos.request.LoginRequest;
 import an.example.wayfare.dtos.request.RegisterRequest;
+import an.example.wayfare.dtos.request.ResendOtpRequest;
 import an.example.wayfare.dtos.request.VerifyEmailRequest;
 import an.example.wayfare.dtos.response.LoginResponse;
 import an.example.wayfare.dtos.response.RegisterResponse;
+import an.example.wayfare.dtos.response.ResendOtpResponse;
 import an.example.wayfare.dtos.response.VerifyEmailResponse;
 import an.example.wayfare.services.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -44,6 +46,13 @@ public class AuthController {
             String refreshToken
     ) {
         return authService.refresh(refreshToken);
+    }
+
+    @PostMapping("/resend-otp")
+    public ResendOtpResponse resendOtp(
+            @Valid @RequestBody ResendOtpRequest request
+    ) {
+        return authService.resendOtp(request);
     }
 
 }
