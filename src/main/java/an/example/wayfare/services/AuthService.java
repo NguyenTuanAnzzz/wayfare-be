@@ -1,14 +1,8 @@
 package an.example.wayfare.services;
 
 
-import an.example.wayfare.dtos.request.LoginRequest;
-import an.example.wayfare.dtos.request.RegisterRequest;
-import an.example.wayfare.dtos.request.ResendOtpRequest;
-import an.example.wayfare.dtos.request.VerifyEmailRequest;
-import an.example.wayfare.dtos.response.LoginResponse;
-import an.example.wayfare.dtos.response.RegisterResponse;
-import an.example.wayfare.dtos.response.ResendOtpResponse;
-import an.example.wayfare.dtos.response.VerifyEmailResponse;
+import an.example.wayfare.dtos.request.*;
+import an.example.wayfare.dtos.response.*;
 import an.example.wayfare.enums.OtpType;
 import an.example.wayfare.enums.Role;
 import an.example.wayfare.enums.UserStatus;
@@ -246,7 +240,6 @@ public class AuthService {
 
     public LoginResponse refresh(String refreshToken) {
 
-        System.out.println("refreshToken = " + refreshToken);
 
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new AppException("Không tìm thấy refresh token", 401);
@@ -254,10 +247,8 @@ public class AuthService {
 
         try {
             String email = jwtService.extractUsername(refreshToken);
-            System.out.println("email = " + email);
 
             String tokenType = jwtService.extractTokenType(refreshToken);
-            System.out.println("tokenType = " + tokenType);
 
             if (!"REFRESH".equals(tokenType)) {
                 throw new AppException("Refresh token không hợp lệ", 401);
@@ -270,7 +261,6 @@ public class AuthService {
             boolean valid =
                     jwtService.isTokenValid(refreshToken, userPrincipal);
 
-            System.out.println("token valid = " + valid);
 
             if (!valid) {
                 throw new AppException(
@@ -361,7 +351,6 @@ public class AuthService {
                             .avatarUrl(avatarUrl)
                             .role(Role.CUSTOMER)
                             .status(UserStatus.ACTIVE)
-                            .password(null)
                             .build();
 
                     return userRepo.save(newUser);
@@ -403,4 +392,149 @@ public class AuthService {
                 .accessToken(accessToken)
                 .build();
     }
+
+
+    @Transactional
+    public ForgotPasswordResponse forgotPassword(
+            @Valid ForgotPasswordRequest request
+    ) {
+
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException(
+                                "Không tìm thấy người dùng",
+                                404
+                        )
+                );
+
+        if (user.getPassword() == null) {
+            throw new AppException(
+                    "Tài khoản này đăng nhập bằng Google, không thể đặt lại mật khẩu",
+                    400
+            );
+        }
+
+        String randomOtp = generateOtp();
+
+        Otp otp = Otp.builder()
+                .email(user.getEmail())
+                .code(passwordEncoder.encode(randomOtp))
+                .type(OtpType.RESET_PASSWORD)
+                .build();
+
+        otpRepo.save(otp);
+
+        emailService.sendEmail(
+                user.getEmail(),
+                "Đặt lại mật khẩu Wayfare",
+                "Mã OTP đặt lại mật khẩu của bạn là: "
+                        + randomOtp
+                        + "\n\nMã OTP có hiệu lực trong 1 phút."
+        );
+
+        return ForgotPasswordResponse.builder()
+                .email(user.getEmail())
+                .message("Đã gửi mã OTP. Vui lòng kiểm tra email.")
+                .expiresAt(otp.getExpiresAt())
+                .build();
+    }
+
+
+    @Transactional
+    public ResendOtpResponse resendResetPasswordOtp(
+            @Valid ResendOtpRequest request
+    ) {
+
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException(
+                                "Không tìm thấy người dùng",
+                                404
+                        )
+                );
+
+        String randomOtp = generateOtp();
+
+        Otp otp = Otp.builder()
+                .email(user.getEmail())
+                .code(passwordEncoder.encode(randomOtp))
+                .type(OtpType.RESET_PASSWORD)
+                .build();
+
+        otpRepo.save(otp);
+
+        emailService.sendEmail(
+                user.getEmail(),
+                "Mã đặt lại mật khẩu Wayfare",
+                "Mã OTP đặt lại mật khẩu của bạn là: "
+                        + randomOtp
+                        + "\n\nMã OTP có hiệu lực trong 1 phút."
+        );
+
+        return ResendOtpResponse.builder()
+                .email(user.getEmail())
+                .message("Đã gửi lại mã OTP. Vui lòng kiểm tra email.")
+                .expiresAt(otp.getExpiresAt())
+                .build();
+    }
+
+
+    @Transactional
+    public ResetPasswordResponse resetPassword(
+            @Valid ResetPasswordRequest request
+    ) {
+
+        Otp otp = otpRepo
+                .findTopByEmailAndTypeOrderByCreatedAtDesc(
+                        request.getEmail(),
+                        OtpType.RESET_PASSWORD
+                )
+                .orElseThrow(() ->
+                        new AppException(
+                                "OTP không tồn tại",
+                                400
+                        )
+                );
+
+        if (!LocalDateTime.now().isBefore(otp.getExpiresAt())) {
+            throw new AppException(
+                    "OTP đã hết hạn",
+                    400
+            );
+        }
+
+        if (!passwordEncoder.matches(
+                request.getOtp(),
+                otp.getCode()
+        )) {
+            throw new AppException(
+                    "OTP không chính xác",
+                    400
+            );
+        }
+
+        User user = userRepo
+                .findByEmail(request.getEmail())
+                .orElseThrow(() ->
+                        new AppException(
+                                "Không tìm thấy người dùng",
+                                404
+                        )
+                );
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        request.getNewPassword()
+                )
+        );
+
+        userRepo.save(user);
+
+        return ResetPasswordResponse.builder()
+                .message("Đặt lại mật khẩu thành công")
+                .build();
+    }
+
 }

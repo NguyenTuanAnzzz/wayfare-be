@@ -1,13 +1,7 @@
 package an.example.wayfare.controllers;
 
-import an.example.wayfare.dtos.request.LoginRequest;
-import an.example.wayfare.dtos.request.RegisterRequest;
-import an.example.wayfare.dtos.request.ResendOtpRequest;
-import an.example.wayfare.dtos.request.VerifyEmailRequest;
-import an.example.wayfare.dtos.response.LoginResponse;
-import an.example.wayfare.dtos.response.RegisterResponse;
-import an.example.wayfare.dtos.response.ResendOtpResponse;
-import an.example.wayfare.dtos.response.VerifyEmailResponse;
+import an.example.wayfare.dtos.request.*;
+import an.example.wayfare.dtos.response.*;
 import an.example.wayfare.services.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -53,6 +47,27 @@ public class AuthController {
             @Valid @RequestBody ResendOtpRequest request
     ) {
         return authService.resendOtp(request);
+    }
+
+    @PostMapping("/forgot-password")
+    public ForgotPasswordResponse forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request
+    ) {
+        return authService.forgotPassword(request);
+    }
+
+    @PostMapping("/resend-reset-password-otp")
+    public ResendOtpResponse resendResetPasswordOtp(
+            @Valid @RequestBody ResendOtpRequest request
+    ) {
+        return authService.resendResetPasswordOtp(request);
+    }
+
+    @PostMapping("/reset-password")
+    public ResetPasswordResponse resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request
+    ) {
+        return authService.resetPassword(request);
     }
 
 }
