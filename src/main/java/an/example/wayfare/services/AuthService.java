@@ -10,6 +10,7 @@ import an.example.wayfare.dtos.response.RegisterResponse;
 import an.example.wayfare.dtos.response.ResendOtpResponse;
 import an.example.wayfare.dtos.response.VerifyEmailResponse;
 import an.example.wayfare.enums.OtpType;
+import an.example.wayfare.enums.Role;
 import an.example.wayfare.enums.UserStatus;
 import an.example.wayfare.exceptions.AppException;
 import an.example.wayfare.models.Otp;
@@ -341,6 +342,65 @@ public class AuthService {
                 .email(user.getEmail())
                 .message("Đã gửi lại mã OTP. Vui lòng kiểm tra email.")
                 .expiresAt(otp.getExpiresAt())
+                .build();
+    }
+
+    public LoginResponse loginWithGoogle(
+            String email,
+            String name,
+            String avatarUrl,
+            HttpServletResponse response
+    ) {
+        User user = userRepo
+                .findByEmail(email)
+                .orElseGet(() -> {
+
+                    User newUser = User.builder()
+                            .email(email)
+                            .name(name)
+                            .avatarUrl(avatarUrl)
+                            .role(Role.CUSTOMER)
+                            .status(UserStatus.ACTIVE)
+                            .password(null)
+                            .build();
+
+                    return userRepo.save(newUser);
+                });
+
+        if (user.getStatus() == UserStatus.BLOCKED) {
+            throw new AppException(
+                    "Tài khoản đã bị khóa",
+                    403
+            );
+        }
+
+        UserPrincipal userPrincipal =
+                (UserPrincipal) customUserDetailsService
+                        .loadUserByUsername(email);
+
+        String accessToken =
+                jwtService.generateAccessToken(userPrincipal);
+
+        String refreshToken =
+                jwtService.generateRefreshToken(userPrincipal);
+
+        ResponseCookie cookie =
+                ResponseCookie
+                        .from("refreshToken", refreshToken)
+                        .httpOnly(true)
+                        .secure(false)
+                        .path("/api/auth")
+                        .maxAge(Duration.ofDays(7))
+                        .sameSite("Lax")
+                        .build();
+
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                cookie.toString()
+        );
+
+        return LoginResponse.builder()
+                .accessToken(accessToken)
                 .build();
     }
 }
