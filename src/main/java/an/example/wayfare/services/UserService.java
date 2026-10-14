@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Objects;
 
 @Service
 public class UserService {
@@ -21,6 +22,9 @@ public class UserService {
 
     @Autowired
     private UserRepo userRepo;
+
+    @Autowired
+    private CloudinaryService cloudinaryService;
 
     public UserResponse getCurrentUser(Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
@@ -44,7 +48,8 @@ public class UserService {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         User user = userPrincipal.getUser();
 
-        if (!user.getPhone().equals(request.getPhone())
+        if (!Objects.equals(user.getPhone(), request.getPhone())
+                && request.getPhone() != null
                 && userRepo.existsByPhone(request.getPhone())) {
             throw new AppException("Số điện thoại đã được sử dụng", 409);
         }
@@ -56,6 +61,15 @@ public class UserService {
 
         if (age < 18) {
             throw new AppException("Bạn phải đủ 18 tuổi", 400);
+        }
+        if (request.getAvatar() != null
+                && !request.getAvatar().isEmpty()) {
+
+            String avatarUrl = cloudinaryService.uploadAvatar(
+                    request.getAvatar()
+            );
+
+            user.setAvatarUrl(avatarUrl);
         }
 
         user.setName(request.getName());
@@ -69,9 +83,11 @@ public class UserService {
                 .email(updatedUser.getEmail())
                 .phone(updatedUser.getPhone())
                 .dob(updatedUser.getDob())
+                .avatarUrl(updatedUser.getAvatarUrl())
                 .role(updatedUser.getRole())
                 .status(updatedUser.getStatus())
+                .createdAt(updatedUser.getCreatedAt())
+                .updatedAt(updatedUser.getUpdatedAt())
                 .build();
-
     }
 }

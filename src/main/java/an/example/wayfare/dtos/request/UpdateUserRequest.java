@@ -1,4 +1,3 @@
-
 package an.example.wayfare.dtos.request;
 
 import jakarta.validation.constraints.NotBlank;
@@ -8,6 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -29,4 +29,6 @@ public class UpdateUserRequest {
     @NotNull(message = "Ngày sinh không được để trống")
     @Past(message = "Ngày sinh phải nằm trong quá khứ")
     private LocalDate dob;
+
+    private MultipartFile avatar;
 }

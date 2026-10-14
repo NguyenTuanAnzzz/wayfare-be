@@ -6,6 +6,7 @@ import an.example.wayfare.dtos.response.UserResponse;
 import an.example.wayfare.services.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,10 +23,13 @@ public class UserController {
         return userService.getCurrentUser(authentication);
     }
 
-    @PutMapping("/me")
+    @PutMapping(
+            value = "/me",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     public UserResponse updateCurrentUser(
             Authentication authentication,
-            @Valid @RequestBody UpdateUserRequest request) {
+            @Valid @ModelAttribute UpdateUserRequest request) {
 
         return userService.updateCurrentUser(authentication, request);
     }
