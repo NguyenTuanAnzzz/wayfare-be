@@ -9,12 +9,17 @@ import an.example.wayfare.models.TourImage;
 import an.example.wayfare.models.TourItinerary;
 import an.example.wayfare.models.TourPackage;
 import an.example.wayfare.repositories.TourPackageRepo;
+import an.example.wayfare.specifications.TourPackageSpecification;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -141,5 +146,76 @@ public class TourPackageService {
                 .itineraries(tourItinerariesResponse)
                 .build();
 
+    }
+
+    public Page<TourPackageResponse> filterTours(
+            String keyword,
+            String location,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Integer minDays,
+            Integer maxDays,
+            Boolean isActive,
+            int page,
+            int size
+    ) {
+        Specification<TourPackage> spec =
+                (root, query, cb) -> cb.conjunction();
+
+        spec = spec
+                .and(TourPackageSpecification.hasKeyword(keyword))
+                .and(TourPackageSpecification.hasLocation(location))
+                .and(TourPackageSpecification.minPrice(minPrice))
+                .and(TourPackageSpecification.maxPrice(maxPrice))
+                .and(TourPackageSpecification.minDays(minDays))
+                .and(TourPackageSpecification.maxDays(maxDays));
+
+        if (isActive != null) {
+            spec = spec.and(
+                    TourPackageSpecification.hasActiveStatus(isActive)
+            );
+        }
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
+        Page<TourPackage> tours =
+                tourPackageRepo.findAll(spec, pageable);
+
+        List<TourPackageResponse> responses = new ArrayList<>();
+
+        for (TourPackage tour : tours.getContent()) {
+            List<TourImageResponse> images = tour.getImages()
+                    .stream()
+                    .map(image -> TourImageResponse.builder()
+                            .id(image.getId())
+                            .imageUrl(image.getImageUrl())
+                            .build())
+                    .toList();
+            TourPackageResponse response = TourPackageResponse.builder()
+                    .id(tour.getId())
+                    .name(tour.getName())
+                    .description(tour.getDescription())
+                    .durationDays(tour.getDurationDays())
+                    .durationNights(tour.getDurationNights())
+                    .price(tour.getPrice())
+                    .location(tour.getLocation())
+                    .isActive(tour.getIsActive())
+                    .createdAt(tour.getCreatedAt())
+                    .updatedAt(tour.getUpdatedAt())
+                    .images(images)
+                    .build();
+
+            responses.add(response);
+        }
+
+        return new PageImpl<>(
+                responses,
+                pageable,
+                tours.getTotalElements()
+        );
     }
 }
