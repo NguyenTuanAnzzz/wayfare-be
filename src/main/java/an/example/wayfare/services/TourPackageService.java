@@ -218,4 +218,52 @@ public class TourPackageService {
                 tours.getTotalElements()
         );
     }
+
+    public TourPackageResponse getTourById(Long id) {
+        TourPackage tour = tourPackageRepo.findById(id)
+                .orElseThrow(() ->
+                        new AppException("Không tìm thấy tour", 404)
+                );
+
+        List<TourImageResponse> images = tour.getImages()
+                .stream()
+                .map(image -> TourImageResponse.builder()
+                        .id(image.getId())
+                        .imageUrl(image.getImageUrl())
+                        .isThumbnail(image.getIsThumbnail())
+                        .isActive(image.getIsActive())
+                        .build())
+                .toList();
+
+        List<TourItineraryResponse> itineraries = tour.getItineraries()
+                .stream()
+                .map(item -> {
+                    TourItineraryResponse response = new TourItineraryResponse();
+
+                    response.setId(item.getId());
+                    response.setDayNumber(item.getDayNumber());
+                    response.setTitle(item.getTitle());
+                    response.setDescription(item.getDescription());
+                    response.setIsActive(item.getIsActive());
+
+                    return response;
+                })
+                .toList();
+
+        return TourPackageResponse.builder()
+                .id(tour.getId())
+                .name(tour.getName())
+                .description(tour.getDescription())
+                .durationDays(tour.getDurationDays())
+                .durationNights(tour.getDurationNights())
+                .price(tour.getPrice())
+                .location(tour.getLocation())
+                .isActive(tour.getIsActive())
+                .createdAt(tour.getCreatedAt())
+                .updatedAt(tour.getUpdatedAt())
+                .deactivatedAt(tour.getDeactivatedAt())
+                .images(images)
+                .itineraries(itineraries)
+                .build();
+    }
 }

@@ -57,4 +57,12 @@ public class TourPackageController {
         );
     }
 
+
+    @GetMapping("/{id}")
+    public TourPackageResponse getTourById(
+            @PathVariable Long id
+    ) {
+        return tourPackageService.getTourById(id);
+    }
+
 }
